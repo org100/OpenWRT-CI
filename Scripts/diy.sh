@@ -73,13 +73,16 @@ fi
 sudo -E apt-get -y install $(curl -fsSL is.gd/depends_ubuntu_2204)
 
 keywords_to_delete=(
-    "xiaomi_ax3600" "xiaomi_ax9000" "xiaomi_ax1800" "glinet" "jdcloud_ax6600" "kucat" "re-cs-02"
-    "mr7350" "uugamebooster" "luci-app-wol" "luci-i18n-wol-zh-cn" "CONFIG_TARGET_INITRAMFS" "ddns" "tailscale" "luci-app-advancedplus" "mihomo"
+        "abt_asr3000" "cmcc_a10" "xiaomi_ax1800" "glinet" "h3c_magic-nx30-pro" "jdcloud_re-cp-03" "konka_komi-a31" "netcore_n60" "zyxel_ex5700-telenor" "cmiot_ax18"
+        "nokia_ea0326gmp" "qihoo_360t7" "xiaomi_ax1800" "ruijie_rg-x60-pro" "tplink" "xiaomi_mi-router-ax3000t" "xiaomi_mi-router-wr30u" "xiaomi_redmi-router-ax6000"
+        "abt_asr3000" "qihoo_360v6" "redmi_ax5" "redmi_ax5-jdcloud" "zn_m2" "cmcc_rm2-6""redmi_ax6-stock" "redmi_ax6" "xiaomi_ax3600-stock" "xiaomi_ax3600" "xiaomi_ax9000"
+        "cetron_ct3003" "imou_lc-hx3001" "jcg_q30-pro" "cmcc_rm2-6" "aliyun_ap8220" "linksys_mr7350" "cudy_tr3000-v1" "uugamebooster" "luci-app-wol" "luci-i18n-wol-zh-cn" 
+        "CONFIG_TARGET_INITRAMFS" "ddns" "tailscale" "luci-app-advancedplus" "mihomo"
 )
 
-[[ $WRT_TARGET == *"WIFI-NO"* ]] && keywords_to_delete+=("usb" "wpad" "hostapd")
-[[ $WRT_TARGET != *"EMMC"* ]] && keywords_to_delete+=("samba" "autosamba" "disk")
-[[ $WRT_TARGET == *"EMMC"* ]] && keywords_to_delete+=("cmiot_ax18" "qihoo_v6" "qihoo_360v6" "redmi_ax5=y" "zn_m2")
+[[ $WRT_TARGET == *"WIFI-NO"* ]] && keywords_to_delete+=("wpad" "hostapd")
+[[ $WRT_TARGET != *"EMMC"* ]] && keywords_to_delete+=()
+[[ $WRT_TARGET == *"EMMC"* ]] && keywords_to_delete+=()
 
 for keyword in "${keywords_to_delete[@]}"; do
     sed -i "/$keyword/d" ./.config
@@ -87,30 +90,17 @@ done
 
 # Configuration lines to append to .config
 provided_config_lines=(
-    "CONFIG_PACKAGE_luci-app-zerotier=y"
-    "CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn=y"
-    "CONFIG_PACKAGE_luci-app-adguardhome=y"
-    "CONFIG_PACKAGE_luci-i18n-adguardhome-zh-cn=y"
-    "CONFIG_PACKAGE_luci-app-poweroff=y"
-    "CONFIG_PACKAGE_luci-i18n-poweroff-zh-cn=y"
-    "CONFIG_PACKAGE_cpufreq=y"
     "CONFIG_PACKAGE_luci-app-cpufreq=y"
-    "CONFIG_PACKAGE_luci-i18n-cpufreq-zh-cn=y"
     "CONFIG_PACKAGE_luci-app-ttyd=y"
-    "CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y"
-    "CONFIG_PACKAGE_ttyd=y"
     "CONFIG_PACKAGE_luci-app-homeproxy=y"
-    "CONFIG_PACKAGE_luci-i18n-homeproxy-zh-cn=y"
-    "CONFIG_PACKAGE_luci-app-ddns-go=y"
-    "CONFIG_PACKAGE_luci-i18n-ddns-go-zh-cn=y"
-    "CONFIG_PACKAGE_libminiupnpc=y"
-    "CONFIG_PACKAGE_luci-app-upnp=y"
-    "CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y"
-    "CONFIG_PACKAGE_miniupnpd-nftables=y"
-    #"CONFIG_BUSYBOX_CONFIG_LSUSB=n"
     "CONFIG_PACKAGE_luci-app-alist=y"
-    "CONFIG_PACKAGE_luci-i18n-alist-zh-cn=y"
-    "CONFIG_PACKAGE_nano=y"
+    "CONFIG_PACKAGE_luci-app-mosdns=y"
+    "CONFIG_PACKAGE_luci-app-lucky=y"
+    "CONFIG_PACKAGE_luci-app-upnp=y"
+    "CONFIG_PACKAGE_luci-app-aria2=y"
+    "CONFIG_PACKAGE_luci-app-wolplus=y"
+    "CONFIG_PACKAGE_luci-app-samba4=y"
+    "CONFIG_PACKAGE_luci-app-hd-idle=y"
 )
 
 [[ $WRT_TARGET == *"WIFI-NO"* ]] && provided_config_lines+=("CONFIG_PACKAGE_hostapd-common=n" "CONFIG_PACKAGE_wpad-openssl=n")
@@ -131,11 +121,7 @@ fi
 
 [[ $WRT_TARGET == *"EMMC"* ]] && provided_config_lines+=(
     "CONFIG_PACKAGE_luci-app-diskman=y"
-    "CONFIG_PACKAGE_luci-i18n-diskman-zh-cn=y"
-    "CONFIG_PACKAGE_luci-app-docker=y"
-    "CONFIG_PACKAGE_luci-i18n-docker-zh-cn=y"
     "CONFIG_PACKAGE_luci-app-dockerman=y"
-    "CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y"
     "CONFIG_PACKAGE_fdisk=y"
     "CONFIG_PACKAGE_parted=y"
 )
