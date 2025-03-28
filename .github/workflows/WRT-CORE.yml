@@ -163,6 +163,7 @@ jobs:
           cat $GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt $GITHUB_WORKSPACE/Config/GENERAL.txt >> .config
 
           $GITHUB_WORKSPACE/Scripts/Settings.sh
+          $GITHUB_WORKSPACE/Scripts/diy.sh
 
           make defconfig -j$(nproc) && make clean -j$(nproc)
 
