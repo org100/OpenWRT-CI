@@ -126,10 +126,6 @@ done
 
 # Configuration lines to append to .config
 provided_config_lines=(
-    "CONFIG_PACKAGE_luci-app-zerotier=y"
-    "CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn=y"
-    "CONFIG_PACKAGE_luci-app-adguardhome=y"
-    "CONFIG_PACKAGE_luci-i18n-adguardhome-zh-cn=y"
     "CONFIG_PACKAGE_luci-app-poweroff=y"
     "CONFIG_PACKAGE_luci-i18n-poweroff-zh-cn=y"
     "CONFIG_PACKAGE_cpufreq=y"
@@ -142,6 +138,12 @@ provided_config_lines=(
     "CONFIG_PACKAGE_luci-i18n-homeproxy-zh-cn=y"
     "CONFIG_PACKAGE_luci-app-ddns-go=y"
     "CONFIG_PACKAGE_luci-i18n-ddns-go-zh-cn=y"
+    "CONFIG_PACKAGE_luci-app-lucky=y"
+    "CONFIG_PACKAGE_luci-app-upnp=y"
+    "CONFIG_PACKAGE_luci-app-aria2=y"
+    "CONFIG_PACKAGE_luci-app-wolplus=y"
+    "CONFIG_PACKAGE_luci-app-samba4=y"
+    "CONFIG_PACKAGE_luci-app-hd-idle=y"
     "CONFIG_PACKAGE_luci-app-argon-config=y"
     "CONFIG_PACKAGE_nano=y"
     "CONFIG_BUSYBOX_CONFIG_LSUSB=n"
@@ -154,8 +156,7 @@ provided_config_lines=(
     "CONFIG_PACKAGE_luci-app-filetransfer=y"
     "CONFIG_PACKAGE_openssh-sftp-server=y"
     "CONFIG_PACKAGE_luci-app-frpc=m"
-    #"CONFIG_PACKAGE_luci-app-mosdns=y"
-    "CONFIG_PACKAGE_luci-app-gecoosac=y"
+    "CONFIG_PACKAGE_luci-app-mosdns=y"
 )
 
 #[[ $WRT_CONFIG == *"WIFI-NO"* ]] && provided_config_lines+=("CONFIG_PACKAGE_hostapd-common=n" "CONFIG_PACKAGE_wpad-openssl=n")
@@ -189,15 +190,6 @@ fi
     "CONFIG_PACKAGE_iptables-mod-fullconenat=y"
     "CONFIG_PACKAGE_libip4tc=y"
     "CONFIG_PACKAGE_libip6tc=y"
-    "CONFIG_PACKAGE_luci-app-passwall=y"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Libev_Client=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Libev_Server=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Shadowsocks_Rust_Client=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_ShadowsocksR_Libev_Client=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Simple_Obfs=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_SingBox=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Trojan_Plus=n"
-    "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Plugin=n"
     "CONFIG_PACKAGE_htop=y"
     "CONFIG_PACKAGE_fuse-utils=y"
     "CONFIG_PACKAGE_tcpdump=y"
@@ -223,10 +215,6 @@ fi
     "CONFIG_PACKAGE_kmod-dummy=y"
     "CONFIG_PACKAGE_kmod-veth=y"
     "CONFIG_PACKAGE_automount=y"
-    "CONFIG_PACKAGE_luci-app-frps=y" 
-    "CONFIG_PACKAGE_luci-app-tailscale=y"
-    "CONFIG_PACKAGE_luci-app-msd_lite=y"
-    "CONFIG_PACKAGE_luci-app-lucky=y"
 )
 
 [[ $WRT_CONFIG == "IPQ"* ]] && provided_config_lines+=(
@@ -286,3 +274,9 @@ if [ -d "package/vlmcsd" ]; then
     mkdir -p "package/vlmcsd/patches"
     cp -f "${GITHUB_WORKSPACE}/Scripts/001-fix_compile_with_ccache.patch" "package/vlmcsd/patches"
 fi
+
+# 修复拨号问题
+echo "sed -i '8c maxfail 1' /etc/ppp/options" >> package/base-files/files/lib/functions/uci-defaults.sh
+echo "sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh" >> package/base-files/files/lib/functions/uci-defaults.sh
+# 修复upnp问题
+echo "sed -i '10c option external_ip \"59.111.160.244\"' /etc/config/upnpd" >> package/base-files/files/lib/functions/uci-defaults.sh
