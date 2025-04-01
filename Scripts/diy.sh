@@ -161,8 +161,6 @@ provided_config_lines=(
 #[[ $WRT_CONFIG == *"WIFI-NO"* ]] && provided_config_lines+=("CONFIG_PACKAGE_hostapd-common=n" "CONFIG_PACKAGE_wpad-openssl=n")
 if [[ $WRT_CONFIG == *"WIFI-NO"* ]]; then
   provided_config_lines+=("CONFIG_PACKAGE_hostapd-common=n" "CONFIG_PACKAGE_wpad-openssl=n")
-else
-  sed -i 's/CONFIG_NSS_FIRMWARE_VERSION_12_2=y/CONFIG_NSS_FIRMWARE_VERSION_11_4=y/' .config
 fi
 
 
