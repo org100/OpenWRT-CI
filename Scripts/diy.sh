@@ -44,7 +44,8 @@ UPDATE_PACKAGE "luci-app-tailscale" "asvow/luci-app-tailscale" "main"
 UPDATE_PACKAGE "openwrt-gecoosac" "lwb1978/openwrt-gecoosac" "main"
 #UPDATE_PACKAGE "luci-app-homeproxy" "immortalwrt/homeproxy" "master"
 UPDATE_PACKAGE "luci-app-ddns-go" "sirpdboy/luci-app-ddns-go" "main"
-UPDATE_PACKAGE "luci-app-alist" "sbwml/luci-app-alist" "main"
+#UPDATE_PACKAGE "luci-app-alist" "sbwml/luci-app-alist" "main"
+UPDATE_PACKAGE "luci-app-openlist" "sbwml/luci-app-openlist" "main"
 
 #small-package
 UPDATE_PACKAGE "xray-core xray-plugin dns2tcp dns2socks haproxy hysteria \
@@ -183,8 +184,8 @@ fi
     "CONFIG_PACKAGE_luci-i18n-docker-zh-cn=m"
     "CONFIG_PACKAGE_luci-app-dockerman=m"
     "CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=m"
-    "CONFIG_PACKAGE_luci-app-alist=y"
-    "CONFIG_PACKAGE_luci-i18n-alist-zh-cn=y"
+    "CONFIG_PACKAGE_luci-app-openlist=y"
+    "CONFIG_PACKAGE_luci-i18n-openlist-zh-cn=y"
     "CONFIG_PACKAGE_fdisk=y"
     "CONFIG_PACKAGE_parted=y"
     "CONFIG_PACKAGE_iptables-mod-extra=y"
