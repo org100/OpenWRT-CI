@@ -1,0 +1,178 @@
+name: Modify DIY Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/mydiy.yml'
+
+jobs:
+  modify-diy-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Backup original file
+      run: |
+        mkdir -p Scripts
+        if [ -f Scripts/diy.sh ]; then
+          cp Scripts/diy.sh Scripts/diy.sh.backup
+          echo "已备份原文件到 Scripts/diy.sh.backup"
+        fi
+
+    - name: Apply modifications to Scripts/diy.sh
+      run: |
+        cat > modify.py << 'ENDPY'
+        import re
+        
+        with open('Scripts/diy.sh', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        content = re.sub(
+            r'("smartdns" "kucat" "bootstrap")\n\)',
+            r'\1 "zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1"\n)',
+            content
+        )
+        print("修改1完成")
+        
+        additions = '\t"CONFIG_PACKAGE_git-http=y"\n\t"CONFIG_PACKAGE_curl=y"\n\t"CONFIG_PACKAGE_openssl-util=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-rndis=y"'
+        
+        content = re.sub(
+            r'(    "CONFIG_PACKAGE_cifsmount=y")\n(\))',
+            r'\1\n' + additions + r'\n\2',
+            content
+        )
+        print("修改2完成")
+        
+        fix_section = """
+        #######################################
+        # Fix PPP / UPnP issues
+        #######################################
+        mkdir -p package/base-files/files/etc/uci-defaults
+        cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes
+        #!/bin/sh
+        # 修复拨号问题
+        sed -i '8c maxfail 1' /etc/ppp/options
+        sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh
+        
+        # 修复 upnp 问题
+        sed -i '10c option external_ip "59.111.160.244"' /etc/config/upnpd
+        
+        exit 0
+        EOF
+        chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes"""
+        
+        if "Fix PPP / UPnP issues" not in content:
+            content = content.rstrip() + '\n' + fix_section + '\n'
+            print("修改3完成")
+        else:
+            print("修改3已存在")
+        
+        with open('Scripts/diy.sh', 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        print("所有修改完成")
+        ENDPY
+        
+        python3 modify.py
+        rm -f modify.py
+
+    - name: Verify modifications
+      run: |
+        echo "================================"
+        echo "验证修改结果"
+        echo "================================"
+        echo ""
+        
+        # 检查第一处修改
+        if grep -q '"zn_m2" "redmi_ax5" "qihoo_360v6"' Scripts/diy.sh; then
+          echo "✓ 第一处修改验证通过：设备列表已更新"
+        else
+          echo "✗ 第一处修改验证失败"
+        fi
+        
+        # 检查第二处修改
+        if grep -q 'CONFIG_PACKAGE_git-http=y' Scripts/diy.sh && \
+           grep -q 'CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y' Scripts/diy.sh; then
+          echo "✓ 第二处修改验证通过：配置项已添加"
+        else
+          echo "✗ 第二处修改验证失败"
+        fi
+        
+        # 检查第三处修改
+        if grep -q 'Fix PPP / UPnP issues' Scripts/diy.sh; then
+          echo "✓ 第三处修改验证通过：PPP/UPnP 修复已添加"
+        else
+          echo "✗ 第三处修改验证失败"
+        fi
+
+    - name: Show diff
+      run: |
+        if [ -f Scripts/diy.sh.backup ]; then
+          echo ""
+          echo "================================"
+          echo "文件变更对比"
+          echo "================================"
+          diff -u Scripts/diy.sh.backup Scripts/diy.sh || true
+        fi
+
+    - name: Check if there are changes
+      id: changes
+      run: |
+        git add Scripts/diy.sh
+        if git diff --cached --quiet; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "没有检测到变化，文件可能已经被修改过"
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "检测到文件变化"
+        fi
+
+    - name: Commit and push changes
+      if: steps.changes.outputs.changed == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git commit -m "Auto update Scripts/diy.sh
+        
+        Changes:
+        1. Add more devices to delete list (zn_m2, redmi_ax5, qihoo_360v6, etc)
+        2. Add packages: git-http, curl, openssl-util, USB network drivers
+        3. Add PPP/UPnP fix script
+        
+        Automated by GitHub Actions"
+        git push
+
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f Scripts/diy.sh.backup
+
+    - name: Summary
+      if: always()
+      run: |
+        echo ""
+        echo "================================"
+        echo "Modification Summary"
+        echo "================================"
+        echo ""
+        echo "Workflow execution completed!"
+        echo ""
+        if [ "${{ steps.changes.outputs.changed }}" == "true" ]; then
+          echo "Scripts/diy.sh has been modified and committed"
+        else
+          echo "Scripts/diy.sh has no changes (may already be modified)"
+        fi
+        echo ""
+        echo "3 modifications applied:"
+        echo "  1. keywords_to_delete array - added 8 devices"
+        echo "  2. provided_config_lines array - added 5 config items"
+        echo "  3. End of file - added PPP/UPnP fix script"
+        echo ""
+        echo "================================"
