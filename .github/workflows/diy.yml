@@ -111,6 +111,14 @@ jobs:
         else
           echo "✗ 第三处修改验证失败"
         fi
+        
+        # 检查第四处修改
+        if grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' Scripts/diy.sh && \
+           grep -q 'CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y' Scripts/diy.sh; then
+          echo "✓ 第四处修改验证通过：dockerman 已改为内置"
+        else
+          echo "✗ 第四处修改验证失败"
+        fi
 
     - name: Show diff
       run: |
@@ -145,6 +153,7 @@ jobs:
         1. Add more devices to delete list (zn_m2, redmi_ax5, qihoo_360v6, etc)
         2. Add packages: git-http, curl, openssl-util, USB network drivers
         3. Add PPP/UPnP fix script
+        4. Change dockerman from module (m) to built-in (y)
         
         Automated by GitHub Actions"
         git push
@@ -170,9 +179,10 @@ jobs:
           echo "Scripts/diy.sh has no changes (may already be modified)"
         fi
         echo ""
-        echo "3 modifications applied:"
+        echo "4 modifications applied:"
         echo "  1. keywords_to_delete array - added 8 devices"
         echo "  2. provided_config_lines array - added 5 config items"
         echo "  3. End of file - added PPP/UPnP fix script"
+        echo "  4. dockerman - changed from module (m) to built-in (y)"
         echo ""
         echo "================================"
