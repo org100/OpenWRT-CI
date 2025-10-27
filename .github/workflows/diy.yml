@@ -10,7 +10,7 @@ on:
     paths:
       - '.github/workflows/sync-upstream.yml'
 
-# 核心修改在这里
+# 修复1: 添加 workflows: write 权限，允许修改工作流文件
 permissions:
   contents: write
   workflows: write
@@ -266,11 +266,14 @@ jobs:
           3. Added PPP/UPnP fix script
           4. Changed dockerman from module (m) to built-in (y)
           
-          Disabled workflows via API:
+          Disabled workflows:
           - Sync Config Files
           - OWRT-ALL
           
           Automated by GitHub Actions"
+          
+          # 修复2: 推送前先拉取远程更新，防止 non-fast-forward 错误
+          git pull origin main --rebase
           
           git push origin main
         fi
@@ -288,7 +291,7 @@ jobs:
           echo "✅ 上游有更新"
           echo "✅ 已同步上游更改"
           echo "✅ 已应用 4 处自定义修改"
-          echo "✅ 已通过 API 禁用 2 个工作流"
+          echo "✅ 已禁用 2 个工作流"
           echo "✅ 已推送到远程仓库"
         else
           echo "ℹ️  上游没有更新，无需同步"
@@ -319,8 +322,8 @@ jobs:
         4. ✅ dockerman 改为内置编译
         
         ## 🚫 禁用的工作流
-        - ✅ Sync Config Files (通过 API 禁用)
-        - ✅ OWRT-ALL (通过 API 禁用)
+        - ✅ Sync Config Files
+        - ✅ OWRT-ALL
         
         ## 🔗 上游仓库
         https://github.com/ysuolmai/OpenWRT-CI
