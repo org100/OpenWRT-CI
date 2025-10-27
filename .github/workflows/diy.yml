@@ -8,17 +8,15 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/sync-upstream.yml'
+      - '.github/workflows/diy.yml'
 
 permissions:
   contents: write  # 用于 push 提交
-  id-token: write
-  # workflows 权限不需要 write，因为我们不修改 workflow 文件本身
 
 jobs:
   sync-and-modify:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -81,60 +79,57 @@ jobs:
       if: steps.check_updates.outputs.has_updates == 'true'
       run: |
         cat > modify.py << 'ENDPY'
-        import re
-        with open('Scripts/diy.sh', 'r', encoding='utf-8') as f:
-            content = f.read()
+import re
 
-        # 修改1：更新 keywords_to_delete
-        content = re.sub(
-            r'("smartdns" "kucat" "bootstrap")\n\)',
-            r'\1 "zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1"\n)',
-            content
-        )
+with open('Scripts/diy.sh', 'r', encoding='utf-8') as f:
+    content = f.read()
 
-        # 修改2：添加额外配置
-        additions = '\t"CONFIG_PACKAGE_git-http=y"\n\t"CONFIG_PACKAGE_curl=y"\n\t"CONFIG_PACKAGE_openssl-util=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-rndis=y"'
-        content = re.sub(
-            r'(    "CONFIG_PACKAGE_cifsmount=y")\n(\))',
-            r'\1\n' + additions + r'\n\2',
-            content
-        )
+# 修改1：更新 keywords_to_delete
+content = re.sub(
+    r'("smartdns" "kucat" "bootstrap")\n\)',
+    r'\1 "zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1"\n)',
+    content
+)
 
-        # 修改3：添加 PPP/UPnP 修复
-        fix_section = """
+# 修改2：添加额外配置
+additions = '\t"CONFIG_PACKAGE_git-http=y"\n\t"CONFIG_PACKAGE_curl=y"\n\t"CONFIG_PACKAGE_openssl-util=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-rndis=y"'
+content = re.sub(
+    r'(    "CONFIG_PACKAGE_cifsmount=y")\n(\))',
+    r'\1\n' + additions + r'\n\2',
+    content
+)
+
+# 修改3：添加 PPP/UPnP 修复
+fix_section = """
 #######################################
 # Fix PPP / UPnP issues
 #######################################
 mkdir -p package/base-files/files/etc/uci-defaults
 cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes
 #!/bin/sh
-# 修复拨号问题
 sed -i '8c maxfail 1' /etc/ppp/options
 sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh
-
-# 修复 upnp 问题
 sed -i '10c option external_ip "59.111.160.244"' /etc/config/upnpd
-
 exit 0
 EOF
 chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes
 """
-        if "Fix PPP / UPnP issues" not in content:
-            content = content.rstrip() + '\n' + fix_section + '\n'
+if "Fix PPP / UPnP issues" not in content:
+    content = content.rstrip() + '\n' + fix_section + '\n'
 
-        # 修改4：dockerman 改为内置
-        content = content.replace(
-            '"CONFIG_PACKAGE_luci-app-dockerman=m"',
-            '"CONFIG_PACKAGE_luci-app-dockerman=y"'
-        )
-        content = content.replace(
-            '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=m"',
-            '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y"'
-        )
+# 修改4：dockerman 改为内置
+content = content.replace(
+    '"CONFIG_PACKAGE_luci-app-dockerman=m"',
+    '"CONFIG_PACKAGE_luci-app-dockerman=y"'
+)
+content = content.replace(
+    '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=m"',
+    '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y"'
+)
 
-        with open('Scripts/diy.sh', 'w', encoding='utf-8') as f:
-            f.write(content)
-        ENDPY
+with open('Scripts/diy.sh', 'w', encoding='utf-8') as f:
+    f.write(content)
+ENDPY
 
         python3 modify.py
         rm -f modify.py
