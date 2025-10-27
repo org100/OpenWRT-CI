@@ -247,32 +247,31 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        # 添加所有更改（包括禁用的工作流文件）
+        # 添加所有更改
         git add -A
         
         # 检查是否有更改
         if git diff --cached --quiet; then
           echo "没有需要提交的更改"
-          exit 0
-        fi
-        
-        git commit -m "Sync from upstream and apply modifications
+        else
+          git commit -m "Sync from upstream and apply modifications
 
-        Synced from: https://github.com/ysuolmai/OpenWRT-CI
-        
-        Applied modifications:
-        1. Added 8 devices to keywords_to_delete array
-        2. Added git-http, curl, openssl-util, USB network drivers
-        3. Added PPP/UPnP fix script
-        4. Changed dockerman from module (m) to built-in (y)
-        
-        Removed workflows:
-        - Sync Config Files (sync-config.yml)
-        - OWRT-ALL (OWRT-ALL.yml)
-        
-        Automated by GitHub Actions"
-        
-        git push origin main
+          Synced from: https://github.com/ysuolmai/OpenWRT-CI
+          
+          Applied modifications:
+          1. Added 8 devices to keywords_to_delete array
+          2. Added git-http, curl, openssl-util, USB network drivers
+          3. Added PPP/UPnP fix script
+          4. Changed dockerman from module (m) to built-in (y)
+          
+          Disabled workflows via API:
+          - Sync Config Files
+          - OWRT-ALL
+          
+          Automated by GitHub Actions"
+          
+          git push origin main
+        fi
 
     - name: Summary
       if: always()
@@ -287,7 +286,7 @@ jobs:
           echo "✅ 上游有更新"
           echo "✅ 已同步上游更改"
           echo "✅ 已应用 4 处自定义修改"
-          echo "✅ 已删除 2 个工作流 (Sync Config Files, OWRT-ALL)"
+          echo "✅ 已通过 API 禁用 2 个工作流"
           echo "✅ 已推送到远程仓库"
         else
           echo "ℹ️  上游没有更新，无需同步"
@@ -318,8 +317,8 @@ jobs:
         4. ✅ dockerman 改为内置编译
         
         ## 🚫 禁用的工作流
-        - ✅ Sync Config Files (已删除)
-        - ✅ OWRT-ALL (已删除)
+        - ✅ Sync Config Files (通过 API 禁用)
+        - ✅ OWRT-ALL (通过 API 禁用)
         
         ## 🔗 上游仓库
         https://github.com/ysuolmai/OpenWRT-CI
