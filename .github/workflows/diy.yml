@@ -10,8 +10,10 @@ on:
     paths:
       - '.github/workflows/sync-upstream.yml'
 
+# 核心修改在这里
 permissions:
   contents: write
+  workflows: write
 
 jobs:
   sync-and-modify:
