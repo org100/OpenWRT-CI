@@ -11,74 +11,73 @@ on:
       - '.github/workflows/diy.yml'
 
 permissions:
-  contents: write  # 用于 push 提交
+  contents: write
 
 jobs:
   sync-and-modify:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up upstream remote
-      run: |
-        git remote add upstream https://github.com/ysuolmai/OpenWRT-CI.git || true
-        git remote -v
+      - name: Set up upstream remote
+        run: |
+          git remote add upstream https://github.com/ysuolmai/OpenWRT-CI.git || true
+          git remote -v
 
-    - name: Fetch upstream changes
-      run: git fetch upstream
+      - name: Fetch upstream changes
+        run: git fetch upstream
 
-    - name: Check for upstream updates
-      id: check_updates
-      run: |
-        LOCAL=$(git rev-parse HEAD)
-        UPSTREAM=$(git rev-parse upstream/main)
-        echo "Local commit: $LOCAL"
-        echo "Upstream commit: $UPSTREAM"
-        if [ "$LOCAL" != "$UPSTREAM" ]; then
-          echo "has_updates=true" >> $GITHUB_OUTPUT
-          echo "发现上游更新！"
-          git log HEAD..upstream/main --oneline --max-count=10
-        else
-          echo "has_updates=false" >> $GITHUB_OUTPUT
-          echo "没有上游更新"
-        fi
-
-    - name: Merge upstream changes
-      if: steps.check_updates.outputs.has_updates == 'true'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        if git merge upstream/main --no-edit; then
-          echo "✓ 成功合并上游更改"
-        else
-          git merge --abort
-          if git rebase upstream/main; then
-            echo "✓ 成功 rebase 上游更改"
+      - name: Check for upstream updates
+        id: check_updates
+        run: |
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/main)
+          echo "Local commit: $LOCAL"
+          echo "Upstream commit: $UPSTREAM"
+          if [ "$LOCAL" != "$UPSTREAM" ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "发现上游更新！"
+            git log HEAD..upstream/main --oneline --max-count=10
           else
-            git rebase --abort
-            git merge upstream/main -X theirs --no-edit
-            echo "⚠ 使用上游版本解决冲突"
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "没有上游更新"
+
+      - name: Merge upstream changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git merge upstream/main --no-edit; then
+            echo "✓ 成功合并上游更改"
+          else
+            git merge --abort
+            if git rebase upstream/main; then
+              echo "✓ 成功 rebase 上游更改"
+            else
+              git rebase --abort
+              git merge upstream/main -X theirs --no-edit
+              echo "⚠ 使用上游版本解决冲突"
+            fi
           fi
-        fi
 
-    - name: Mark specific workflows as disabled
-      if: steps.check_updates.outputs.has_updates == 'true'
-      run: |
-        echo "标记指定 workflow 为禁用状态"
-        touch .github/workflows/disable_sync_config.flag
-        touch .github/workflows/disable_owrt_all.flag
-        echo "当前工作流标记文件："
-        ls -la .github/workflows/*.flag || echo "无"
+      - name: Mark workflows as disabled
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "标记指定 workflow 为禁用状态"
+          touch .github/workflows/disable_sync_config.flag
+          touch .github/workflows/disable_owrt_all.flag
+          echo "当前工作流标记文件："
+          ls -la .github/workflows/*.flag || echo "无"
 
-    - name: Apply 4 modifications to Scripts/diy.sh
-      if: steps.check_updates.outputs.has_updates == 'true'
-      run: |
-        cat > modify.py << 'ENDPY'
+      - name: Apply 4 modifications to Scripts/diy.sh
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          cat > modify.py << 'ENDPY'
 import re
 
 with open('Scripts/diy.sh', 'r', encoding='utf-8') as f:
@@ -131,37 +130,37 @@ with open('Scripts/diy.sh', 'w', encoding='utf-8') as f:
     f.write(content)
 ENDPY
 
-        python3 modify.py
-        rm -f modify.py
+          python3 modify.py
+          rm -f modify.py
 
-    - name: Verify modifications
-      if: steps.check_updates.outputs.has_updates == 'true'
-      run: |
-        echo "验证修改结果..."
-        grep -q '"zn_m2" "redmi_ax5" "qihoo_360v6"' Scripts/diy.sh && echo "✓ 修改1通过"
-        grep -q 'CONFIG_PACKAGE_git-http=y' Scripts/diy.sh && echo "✓ 修改2通过"
-        grep -q 'Fix PPP / UPnP issues' Scripts/diy.sh && echo "✓ 修改3通过"
-        grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' Scripts/diy.sh && echo "✓ 修改4通过"
+      - name: Verify modifications
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          echo "验证修改结果..."
+          grep -q '"zn_m2" "redmi_ax5" "qihoo_360v6"' Scripts/diy.sh && echo "✓ 修改1通过"
+          grep -q 'CONFIG_PACKAGE_git-http=y' Scripts/diy.sh && echo "✓ 修改2通过"
+          grep -q 'Fix PPP / UPnP issues' Scripts/diy.sh && echo "✓ 修改3通过"
+          grep -q 'CONFIG_PACKAGE_luci-app-dockerman=y' Scripts/diy.sh && echo "✓ 修改4通过"
 
-    - name: Commit and push changes
-      if: steps.check_updates.outputs.has_updates == 'true'
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add -A
-        if git diff --cached --quiet; then
-          echo "没有需要提交的更改"
-          exit 0
-        fi
-        git commit -m "Sync from upstream and apply modifications"
-        git push origin main
+      - name: Commit and push changes
+        if: steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "没有需要提交的更改"
+            exit 0
+          fi
+          git commit -m "Sync from upstream and apply modifications"
+          git push origin main
 
-    - name: Summary
-      if: always()
-      run: |
-        echo "同步与修改总结"
-        if [ "${{ steps.check_updates.outputs.has_updates }}" == "true" ]; then
-          echo "✅ 上游有更新，已同步和修改"
-        else
-          echo "ℹ️ 上游没有更新，无需同步"
-        fi
+      - name: Summary
+        if: always()
+        run: |
+          echo "同步与修改总结"
+          if [ "${{ steps.check_updates.outputs.has_updates }}" == "true" ]; then
+            echo "✅ 上游有更新，已同步和修改"
+          else
+            echo "ℹ️ 上游没有更新，无需同步"
+          fi
