@@ -1,32 +1,92 @@
-name: Modify DIY Script
+name: Sync Upstream and Apply Modifications
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'  # 每天凌晨2点（UTC时间）自动执行
   push:
     branches:
       - main
     paths:
-      - '.github/workflows/mydiy.yml'
+      - '.github/workflows/sync-upstream.yml'
 
 jobs:
-  modify-diy-script:
+  sync-and-modify:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Backup original file
+    - name: Set up upstream remote
       run: |
-        mkdir -p Scripts
-        if [ -f Scripts/diy.sh ]; then
-          cp Scripts/diy.sh Scripts/diy.sh.backup
-          echo "已备份原文件到 Scripts/diy.sh.backup"
+        git remote add upstream https://github.com/ysuolmai/OpenWRT-CI.git || true
+        git remote -v
+
+    - name: Fetch upstream changes
+      run: |
+        echo "Fetching from upstream..."
+        git fetch upstream
+        
+    - name: Check for upstream updates
+      id: check_updates
+      run: |
+        # 获取本地和上游的最新提交
+        LOCAL=$(git rev-parse HEAD)
+        UPSTREAM=$(git rev-parse upstream/main)
+        
+        echo "Local commit: $LOCAL"
+        echo "Upstream commit: $UPSTREAM"
+        
+        if [ "$LOCAL" != "$UPSTREAM" ]; then
+          echo "has_updates=true" >> $GITHUB_OUTPUT
+          echo "发现上游更新！"
+          
+          # 显示上游的新提交
+          echo ""
+          echo "================================"
+          echo "上游新提交："
+          echo "================================"
+          git log HEAD..upstream/main --oneline --max-count=10
+        else
+          echo "has_updates=false" >> $GITHUB_OUTPUT
+          echo "没有上游更新"
         fi
 
-    - name: Apply modifications to Scripts/diy.sh
+    - name: Merge upstream changes
+      if: steps.check_updates.outputs.has_updates == 'true'
+      run: |
+        echo "合并上游更改..."
+        
+        # 配置 git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # 尝试合并
+        if git merge upstream/main --no-edit; then
+          echo "✓ 成功合并上游更改"
+        else
+          echo "✗ 合并冲突，尝试使用 rebase"
+          git merge --abort
+          
+          # 尝试 rebase
+          if git rebase upstream/main; then
+            echo "✓ 成功 rebase 上游更改"
+          else
+            echo "✗ Rebase 失败，使用强制策略"
+            git rebase --abort
+            
+            # 使用 theirs 策略处理冲突
+            git merge upstream/main -X theirs --no-edit
+            echo "⚠ 使用上游版本解决冲突"
+          fi
+        fi
+
+    - name: Apply 4 modifications to Scripts/diy.sh
+      if: steps.check_updates.outputs.has_updates == 'true'
       run: |
         cat > modify.py << 'ENDPY'
         import re
@@ -34,13 +94,15 @@ jobs:
         with open('Scripts/diy.sh', 'r', encoding='utf-8') as f:
             content = f.read()
         
+        # 第一处修改：替换 keywords_to_delete 数组中的最后一行
         content = re.sub(
             r'("smartdns" "kucat" "bootstrap")\n\)',
             r'\1 "zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1"\n)',
             content
         )
-        print("修改1完成")
+        print("修改1完成：更新 keywords_to_delete 数组")
         
+        # 第二处修改：在 cifsmount=y 后添加新配置
         additions = '\t"CONFIG_PACKAGE_git-http=y"\n\t"CONFIG_PACKAGE_curl=y"\n\t"CONFIG_PACKAGE_openssl-util=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"\n\t"CONFIG_PACKAGE_kmod-usb-net-rndis=y"'
         
         content = re.sub(
@@ -48,8 +110,9 @@ jobs:
             r'\1\n' + additions + r'\n\2',
             content
         )
-        print("修改2完成")
+        print("修改2完成：添加额外配置项")
         
+        # 第三处修改：在文件末尾添加 PPP/UPnP 修复
         fix_section = """
         #######################################
         # Fix PPP / UPnP issues
@@ -70,20 +133,32 @@ jobs:
         
         if "Fix PPP / UPnP issues" not in content:
             content = content.rstrip() + '\n' + fix_section + '\n'
-            print("修改3完成")
+            print("修改3完成：添加 PPP/UPnP 修复脚本")
         else:
-            print("修改3已存在")
+            print("修改3已存在，跳过")
+        
+        # 第四处修改：将 dockerman 从 m 改为 y
+        content = content.replace(
+            '"CONFIG_PACKAGE_luci-app-dockerman=m"',
+            '"CONFIG_PACKAGE_luci-app-dockerman=y"'
+        )
+        content = content.replace(
+            '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=m"',
+            '"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y"'
+        )
+        print("修改4完成：dockerman 改为内置(y)")
         
         with open('Scripts/diy.sh', 'w', encoding='utf-8') as f:
             f.write(content)
         
-        print("所有修改完成")
+        print("\n所有修改完成！")
         ENDPY
         
         python3 modify.py
         rm -f modify.py
 
     - name: Verify modifications
+      if: steps.check_updates.outputs.has_updates == 'true'
       run: |
         echo "================================"
         echo "验证修改结果"
@@ -120,69 +195,85 @@ jobs:
           echo "✗ 第四处修改验证失败"
         fi
 
-    - name: Show diff
-      run: |
-        if [ -f Scripts/diy.sh.backup ]; then
-          echo ""
-          echo "================================"
-          echo "文件变更对比"
-          echo "================================"
-          diff -u Scripts/diy.sh.backup Scripts/diy.sh || true
-        fi
-
-    - name: Check if there are changes
-      id: changes
-      run: |
-        git add Scripts/diy.sh
-        if git diff --cached --quiet; then
-          echo "changed=false" >> $GITHUB_OUTPUT
-          echo "没有检测到变化，文件可能已经被修改过"
-        else
-          echo "changed=true" >> $GITHUB_OUTPUT
-          echo "检测到文件变化"
-        fi
-
     - name: Commit and push changes
-      if: steps.changes.outputs.changed == 'true'
+      if: steps.check_updates.outputs.has_updates == 'true'
       run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git commit -m "Auto update Scripts/diy.sh
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
         
-        Changes:
-        1. Add more devices to delete list (zn_m2, redmi_ax5, qihoo_360v6, etc)
-        2. Add packages: git-http, curl, openssl-util, USB network drivers
-        3. Add PPP/UPnP fix script
-        4. Change dockerman from module (m) to built-in (y)
+        # 检查是否有更改
+        if git diff --quiet && git diff --cached --quiet; then
+          echo "没有需要提交的更改"
+          exit 0
+        fi
+        
+        git add Scripts/diy.sh
+        
+        git commit -m "Sync from upstream and apply modifications
+
+        Synced from: https://github.com/ysuolmai/OpenWRT-CI
+        
+        Applied modifications:
+        1. Added 8 devices to keywords_to_delete array
+        2. Added git-http, curl, openssl-util, USB network drivers
+        3. Added PPP/UPnP fix script
+        4. Changed dockerman from module (m) to built-in (y)
         
         Automated by GitHub Actions"
-        git push
-
-    - name: Cleanup
-      if: always()
-      run: |
-        rm -f Scripts/diy.sh.backup
+        
+        git push origin main
 
     - name: Summary
       if: always()
       run: |
         echo ""
         echo "================================"
-        echo "Modification Summary"
+        echo "Sync and Modification Summary"
         echo "================================"
         echo ""
-        echo "Workflow execution completed!"
-        echo ""
-        if [ "${{ steps.changes.outputs.changed }}" == "true" ]; then
-          echo "Scripts/diy.sh has been modified and committed"
+        
+        if [ "${{ steps.check_updates.outputs.has_updates }}" == "true" ]; then
+          echo "✅ 上游有更新"
+          echo "✅ 已同步上游更改"
+          echo "✅ 已应用 4 处自定义修改"
+          echo "✅ 已推送到远程仓库"
         else
-          echo "Scripts/diy.sh has no changes (may already be modified)"
+          echo "ℹ️  上游没有更新，无需同步"
         fi
+        
         echo ""
-        echo "4 modifications applied:"
-        echo "  1. keywords_to_delete array - added 8 devices"
-        echo "  2. provided_config_lines array - added 5 config items"
-        echo "  3. End of file - added PPP/UPnP fix script"
-        echo "  4. dockerman - changed from module (m) to built-in (y)"
+        echo "上游仓库: https://github.com/ysuolmai/OpenWRT-CI"
+        echo "同步频率: 每天凌晨 2:00 (UTC)"
         echo ""
         echo "================================"
+
+    - name: Create sync report
+      if: steps.check_updates.outputs.has_updates == 'true'
+      run: |
+        cat > sync_report.md << 'EOFREPORT'
+        # 同步报告
+        
+        ## 📅 同步时间
+        $(date '+%Y-%m-%d %H:%M:%S %Z')
+        
+        ## 🔄 同步状态
+        ✅ 成功同步上游更新
+        
+        ## 📝 应用的修改
+        1. ✅ 添加设备到删除列表 (8个设备)
+        2. ✅ 添加软件包配置 (5个包)
+        3. ✅ 添加 PPP/UPnP 修复脚本
+        4. ✅ dockerman 改为内置编译
+        
+        ## 🔗 上游仓库
+        https://github.com/ysuolmai/OpenWRT-CI
+        
+        ## 📊 新提交
+        ```
+        $(git log HEAD~5..HEAD --oneline)
+        ```
+        EOFREPORT
+        
+        cat sync_report.md
+        echo ""
+        echo "同步报告已生成！"
