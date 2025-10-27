@@ -85,6 +85,49 @@ jobs:
           fi
         fi
 
+    - name: Disable specific workflows
+      if: steps.check_updates.outputs.has_updates == 'true'
+      run: |
+        echo "================================"
+        echo "禁用指定的工作流"
+        echo "================================"
+        
+        # 查找并禁用 Sync Config Files 工作流
+        if [ -f ".github/workflows/sync-config.yml" ]; then
+          echo "找到 sync-config.yml，重命名为 .sync-config.yml.disabled"
+          mv .github/workflows/sync-config.yml .github/workflows/.sync-config.yml.disabled
+        fi
+        
+        # 查找其他可能的文件名
+        for file in .github/workflows/*sync*config*.yml .github/workflows/*Sync*Config*.yml; do
+          if [ -f "$file" ] && [[ "$file" != *".disabled"* ]]; then
+            echo "找到 $(basename $file)，禁用中..."
+            mv "$file" "${file}.disabled"
+          fi
+        done
+        
+        # 查找并禁用 OWRT-ALL 工作流
+        if [ -f ".github/workflows/OWRT-ALL.yml" ]; then
+          echo "找到 OWRT-ALL.yml，重命名为 .OWRT-ALL.yml.disabled"
+          mv .github/workflows/OWRT-ALL.yml .github/workflows/.OWRT-ALL.yml.disabled
+        fi
+        
+        # 查找其他可能的文件名（大小写变体）
+        for file in .github/workflows/*owrt*all*.yml .github/workflows/*OWRT*ALL*.yml; do
+          if [ -f "$file" ] && [[ "$file" != *".disabled"* ]]; then
+            echo "找到 $(basename $file)，禁用中..."
+            mv "$file" "${file}.disabled"
+          fi
+        done
+        
+        # 列出所有工作流文件
+        echo ""
+        echo "当前工作流文件："
+        ls -la .github/workflows/
+        
+        echo ""
+        echo "✓ 已禁用指定的工作流"
+
     - name: Apply 4 modifications to Scripts/diy.sh
       if: steps.check_updates.outputs.has_updates == 'true'
       run: |
@@ -201,13 +244,14 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         
+        # 添加所有更改（包括禁用的工作流文件）
+        git add -A
+        
         # 检查是否有更改
-        if git diff --quiet && git diff --cached --quiet; then
+        if git diff --cached --quiet; then
           echo "没有需要提交的更改"
           exit 0
         fi
-        
-        git add Scripts/diy.sh
         
         git commit -m "Sync from upstream and apply modifications
 
@@ -218,6 +262,10 @@ jobs:
         2. Added git-http, curl, openssl-util, USB network drivers
         3. Added PPP/UPnP fix script
         4. Changed dockerman from module (m) to built-in (y)
+        
+        Disabled workflows:
+        - Sync Config Files
+        - OWRT-ALL
         
         Automated by GitHub Actions"
         
@@ -236,6 +284,7 @@ jobs:
           echo "✅ 上游有更新"
           echo "✅ 已同步上游更改"
           echo "✅ 已应用 4 处自定义修改"
+          echo "✅ 已禁用 2 个工作流 (Sync Config Files, OWRT-ALL)"
           echo "✅ 已推送到远程仓库"
         else
           echo "ℹ️  上游没有更新，无需同步"
@@ -264,6 +313,10 @@ jobs:
         2. ✅ 添加软件包配置 (5个包)
         3. ✅ 添加 PPP/UPnP 修复脚本
         4. ✅ dockerman 改为内置编译
+        
+        ## 🚫 禁用的工作流
+        - ✅ Sync Config Files
+        - ✅ OWRT-ALL
         
         ## 🔗 上游仓库
         https://github.com/ysuolmai/OpenWRT-CI
