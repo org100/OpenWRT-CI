@@ -10,10 +10,10 @@ on:
     paths:
       - '.github/workflows/sync-upstream.yml'
 
-# 修复1: 添加 workflows: write 权限，允许修改工作流文件
+# 修复：使用正确的 `actions: write` 权限
 permissions:
   contents: write
-  workflows: write
+  actions: write
 
 jobs:
   sync-and-modify:
@@ -272,7 +272,7 @@ jobs:
           
           Automated by GitHub Actions"
           
-          # 修复2: 推送前先拉取远程更新，防止 non-fast-forward 错误
+          # 推送前先拉取远程更新，防止 non-fast-forward 错误
           git pull origin main --rebase
           
           git push origin main
