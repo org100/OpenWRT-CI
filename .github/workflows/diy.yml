@@ -3,7 +3,7 @@ name: Sync Upstream and Apply Modifications
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'  # 每天凌晨2点（UTC时间）自动执行
+    - cron: '0 2 * * *'
   push:
     branches:
       - main
