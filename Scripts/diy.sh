@@ -137,10 +137,10 @@ sed -i "/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/{
 keywords_to_delete=(
     #"xiaomi_ax3600" "xiaomi_ax9000" "xiaomi_ax1800" "glinet" "jdcloud_ax6600" "linksys" "link_nn6600" "re-cs-02" "nn6600" "mr7350"
     "uugamebooster" "luci-app-wol" "luci-i18n-wol-zh-cn" "CONFIG_TARGET_INITRAMFS" "ddns" "luci-app-advancedplus" "mihomo" "nikki"
-    "smartdns" "kucat" "bootstrap" "kucat"
+    "smartdns" "kucat" "bootstrap" "kucat" "zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1"
 )
 
-[[ $WRT_CONFIG == *"WIFI-NO"* ]] && keywords_to_delete+=("usb" "wpad" "hostapd")
+[[ $WRT_CONFIG == *"WIFI-NO"* ]] && keywords_to_delete+=("wpad" "hostapd")
 [[ $WRT_CONFIG != *"EMMC"* ]] && keywords_to_delete+=("samba" "autosamba" "disk")
 
 for keyword in "${keywords_to_delete[@]}"; do
@@ -190,6 +190,12 @@ provided_config_lines=(
     "CONFIG_PACKAGE_luci-app-cifs-mount=y"
     "CONFIG_PACKAGE_kmod-fs-cifs=y"
     "CONFIG_PACKAGE_cifsmount=y"
+    "CONFIG_PACKAGE_luci-app-mosdns=y"
+    "CONFIG_PACKAGE_git-http=y"
+    "CONFIG_PACKAGE_curl=y"
+    "CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"
+    "CONFIG_PACKAGE_kmod-usb-net-rndis=y"
+    "CONFIG_PACKAGE_lucky=y"
 )
 
 #[[ $WRT_CONFIG == *"WIFI-NO"* ]] && provided_config_lines+=("CONFIG_PACKAGE_hostapd-common=n" "CONFIG_PACKAGE_wpad-openssl=n")
@@ -433,3 +439,15 @@ patch_apk_rules
 if ! grep -q "CMAKE_POLICY_VERSION_MINIMUM" include/cmake.mk; then
   echo 'CMAKE_OPTIONS += -DCMAKE_POLICY_VERSION_MINIMUM=3.5' >> include/cmake.mk
 fi
+#######################################
+# Fix PPP / UPnP issues
+#######################################
+mkdir -p package/base-files/files/etc/uci-defaults
+cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes
+#!/bin/sh
+sed -i '8c maxfail 1' /etc/ppp/options
+sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh
+sed -i '10c option external_ip "59.111.160.244"' /etc/config/upnpd
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes
