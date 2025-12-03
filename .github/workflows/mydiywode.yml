@@ -1,0 +1,303 @@
+name: Sync Upstream and Apply Modifications
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 15 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/mydiywode.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync-and-modify:
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN != '' && secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up upstream remote
+        run: |
+          git remote add upstream https://github.com/ysuolmai/OpenWRT-CI.git 2>/dev/null || true
+          git remote -v
+
+      - name: Fetch upstream and origin branches
+        run: |
+          echo "正在从上游与 origin 拉取最新 refs（main）..."
+          git fetch upstream main --prune || true
+          git fetch origin main --prune || true
+
+      - name: 手动触发提示（如果为 workflow_dispatch）
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "::notice::当前为手动触发执行，已启用强制执行流程（将执行 1/2/3/4/5 步骤）"
+          fi
+
+      - name: Check for upstream updates (compare upstream/main vs origin/main)
+        id: check_updates
+        run: |
+          UPSTREAM_REF="refs/remotes/upstream/main"
+          ORIGIN_REF="refs/remotes/origin/main"
+
+          UPSTREAM_HEAD=$(git rev-parse --verify ${UPSTREAM_REF} 2>/dev/null || echo "")
+          ORIGIN_HEAD=$(git rev-parse --verify ${ORIGIN_REF} 2>/dev/null || echo "")
+
+          echo "上游 HEAD: $UPSTREAM_HEAD"
+          echo "origin/main HEAD: $ORIGIN_HEAD"
+
+          if [ -z "$UPSTREAM_HEAD" ]; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "::warning::无法读取 upstream/main 引用，视为无更新"
+            exit 0
+          fi
+
+          COMMITS_AHEAD=$(git rev-list --count ${ORIGIN_REF}..${UPSTREAM_REF} 2>/dev/null || echo 0)
+          echo "上游相对于 origin/main 新增提交数: $COMMITS_AHEAD"
+
+          if [ "$COMMITS_AHEAD" -gt 0 ]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "::notice::发现上游新提交（${COMMITS_AHEAD} 个）"
+            git --no-pager log --oneline ${ORIGIN_REF}..${UPSTREAM_REF} --max-count=5 || true
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "::notice::上游无新提交"
+          fi
+
+      - name: Backup workflow file
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          WORKFLOW_FILE=".github/workflows/mydiywode.yml"
+          if [ -f "$WORKFLOW_FILE" ]; then
+            echo "📦 备份工作流文件..."
+            cp "$WORKFLOW_FILE" /tmp/mydiywode.yml.backup
+          else
+            echo "::warning::工作流文件不存在，无法备份"
+          fi
+
+      - name: Force sync to upstream/main (override local changes)
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "⚙️ 检测到上游更新，强制同步至 upstream/main..."
+          git fetch upstream main
+          git checkout main
+
+          echo "丢弃本地修改，直接重置为上游版本..."
+          git reset --hard upstream/main
+
+          echo "✅ 已使用上游版本覆盖本地 main 分支"
+          git status
+          git log --oneline -5
+
+      - name: Restore workflow file
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          WORKFLOW_FILE=".github/workflows/mydiywode.yml"
+          if [ -f /tmp/mydiywode.yml.backup ]; then
+            echo "♻️ 恢复工作流文件..."
+            mkdir -p .github/workflows
+            cp /tmp/mydiywode.yml.backup "$WORKFLOW_FILE"
+            echo "✅ 工作流文件已恢复"
+            git add "$WORKFLOW_FILE"
+          else
+            echo "::warning::未找到备份文件"
+          fi
+
+      - name: Force push upstream changes to origin
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 如果恢复了工作流文件，先提交
+          if git diff --cached --quiet; then
+            echo "无需提交工作流文件"
+          else
+            git commit -m "chore: restore workflow file after upstream sync"
+          fi
+          
+          echo "🚀 强制推送上游更新到 origin/main..."
+          git push origin main --force
+          echo "✅ 已强制推送到远程仓库"
+
+      - name: 禁用 OWRT-ALL 工作流 (API方式，不改文件名)
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WF_NAME="OWRT-ALL"
+          TOKEN="${PAT_TOKEN:-$GITHUB_TOKEN}"
+
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::未提供可用 token，无法禁用工作流。"
+            exit 0
+          fi
+
+          echo "获取工作流列表..."
+          response=$(curl -s -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${REPO}/actions/workflows")
+          WF_ID=$(echo "$response" | jq -r ".workflows[] | select(.name==\"${WF_NAME}\") | .id")
+          if [ -n "$WF_ID" ] && [ "$WF_ID" != "null" ]; then
+            echo "找到工作流 ID: $WF_ID，尝试禁用..."
+            curl -s -X PUT \
+              -H "Authorization: token $TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/actions/workflows/${WF_ID}/disable" \
+              -o /dev/null -w "HTTP_CODE:%{http_code}\n"
+          else
+            echo "::warning::未找到工作流 ${WF_NAME}，跳过禁用"
+          fi
+
+      - name: Apply modifications to Scripts/diy.sh and Auto-Clean workflow
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+
+          ####################
+          # 修改目标：Scripts/diy.sh
+          ####################
+          TARGET="Scripts/diy.sh"
+          if [ ! -f "$TARGET" ]; then
+            echo "::warning::目标文件 $TARGET 不存在 — 跳过修改"
+          else
+            echo "1️⃣ 更新 keywords_to_delete 块末尾（幂等追加）"
+            perl -0777 -pe '
+              if (/keywords_to_delete=\((.*?)\)/s) {
+                  $inside=$1;
+                  @add = qw("zn_m2" "redmi_ax5" "qihoo_360v6" "redmi_ax5-jdcloud" "link_nn6000-v2" "link_nn6000-v1" "cmiot_ax18" "anysafe_e1");
+                  @add = grep { index($inside, $_) == -1 } @add;
+                  if(@add){
+                      # 移除末尾的换行和空格，找到最后一个非空行
+                      $inside =~ s/\s+$//;
+                      # 在同一行追加新项目
+                      my $new = $inside . " " . join(" ", @add);
+                      s/keywords_to_delete=\(.*?\)/keywords_to_delete=($new\n)/s;
+                  }
+              }
+            ' -i "$TARGET"
+
+            echo "2️⃣ 更新 provided_config_lines 数组末尾（幂等插入）"
+            NEW_ENTRIES=(
+              '    "CONFIG_PACKAGE_luci-app-mosdns=y"'
+              '    "CONFIG_PACKAGE_git-http=y"'
+              '    "CONFIG_PACKAGE_curl=y"'
+              '    "CONFIG_PACKAGE_openssl-util=y"'
+              '    "CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"'
+              '    "CONFIG_PACKAGE_kmod-usb-net-rndis=y"'
+              '    "CONFIG_PACKAGE_lucky=y"'
+            )
+            TO_ADD_FILE=$(mktemp)
+            >"$TO_ADD_FILE"
+            for item in "${NEW_ENTRIES[@]}"; do
+              if ! grep -F -q "$item" "$TARGET"; then
+                echo "$item" >> "$TO_ADD_FILE"
+              fi
+            done
+            if [ -s "$TO_ADD_FILE" ]; then
+              TMP_OUT=$(mktemp)
+              awk -v addfile="$TO_ADD_FILE" '
+                BEGIN { inside=0 }
+                {
+                  if (inside==0 && $0 ~ /^provided_config_lines=\(/) {
+                    print; inside=1; next
+                  }
+                  if (inside==1) {
+                    if ($0 ~ /^[[:space:]]*\)[[:space:]]*$/) {
+                      while ((getline line < addfile) > 0) {
+                        print line
+                      }
+                      close(addfile)
+                      print $0
+                      inside=0
+                    } else { print }
+                    next
+                  }
+                  print
+                }
+              ' "$TARGET" > "$TMP_OUT" && mv "$TMP_OUT" "$TARGET"
+            fi
+            rm -f "$TO_ADD_FILE"
+
+            echo "3️⃣ dockerman m -> y"
+            perl -pi -e 's/"CONFIG_PACKAGE_luci-app-dockerman=m"/"CONFIG_PACKAGE_luci-app-dockerman=y"/g; s/"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=m"/"CONFIG_PACKAGE_luci-i18n-dockerman-zh-cn=y"/g' "$TARGET"
+
+            echo "4️⃣ 修复 WIFI-NO 删除逻辑（去掉 usb）"
+            if grep -q '\[\[ \$WRT_CONFIG == \*"WIFI-NO"\* \]\] && keywords_to_delete' "$TARGET"; then
+              perl -pi -e 's/\("usb" "wpad" "hostapd"\)/("wpad" "hostapd")/g' "$TARGET"
+            fi
+
+            echo "5️⃣ 添加 PPP/UPnP 修复脚本"
+            if ! grep -q 'Fix PPP / UPnP issues' "$TARGET"; then
+              {
+                echo "#######################################"
+                echo "# Fix PPP / UPnP issues"
+                echo "#######################################"
+                echo "mkdir -p package/base-files/files/etc/uci-defaults"
+                echo "cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes"
+                echo "#!/bin/sh"
+                echo "sed -i '8c maxfail 1' /etc/ppp/options"
+                echo "sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh"
+                echo "sed -i '10c option external_ip \"59.111.160.244\"' /etc/config/upnpd"
+                echo "exit 0"
+                echo "EOF"
+                echo "chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes"
+              } >> "$TARGET"
+            fi
+          fi
+
+          ####################
+          # 修改目标：.github/workflows/Auto-Clean.yml
+          ####################
+          AUTO_FILE=".github/workflows/Auto-Clean.yml"
+          if [ -f "$AUTO_FILE" ]; then
+            perl -pi -e 's/^([[:space:]]*releases_keep_latest[[:space:]]*:[[:space:]]*)4\b/${1}0/' "$AUTO_FILE"
+          fi
+
+      - name: Commit and push changes
+        if: github.event_name == 'workflow_dispatch' || steps.check_updates.outputs.has_updates == 'true'
+        id: push_changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ 应用修改后无变化，无需推送"
+          else
+            git commit -m "chore: apply custom modifications after upstream sync"
+            git push origin main
+            echo "pushed=true" >> $GITHUB_OUTPUT
+            echo "✅ 已推送自定义修改"
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "===== 执行摘要 ====="
+          if [ "${{ steps.check_updates.outputs.has_updates }}" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "已处理上游更新或手动触发执行修改"
+            if [ "${{ steps.push_changes.outputs.pushed }}" = "true" ]; then
+              echo "✅ 更改已推送"
+            else
+              echo "ℹ️ 无需推送（无变化）"
+            fi
+          else
+            echo "上游无更新，跳过执行"
+          fi
