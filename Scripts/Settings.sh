@@ -44,6 +44,15 @@ if [ -n "$WRT_PACKAGE" ]; then
 	echo -e "$WRT_PACKAGE" >> ./.config
 fi
 
+# 只保留指定的 ipq60xx 设备
+if [[ $WRT_CONFIG == *"IPQ60XX"* ]]; then
+    # 只保留： jdcloud_re-ss-01
+    keep_pattern="\(jdcloud_re-ss-01\)=y$"
+    sed -i "/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/{
+        /$keep_pattern/!d
+    }" ./.config
+fi
+
 #高通平台调整
 DTS_PATH="./target/linux/qualcommax/dts/"
 if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
@@ -68,3 +77,38 @@ if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
 	#其他调整
 	echo "CONFIG_PACKAGE_kmod-usb-serial-qualcomm=y" >> ./.config
 fi
+
+#######################################
+# LAN IP / Hostname via uci-defaults
+#######################################
+mkdir -p package/base-files/files/etc/uci-defaults
+cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-set-lan
+#!/bin/sh
+# 设置 LAN IP
+uci set network.lan.ipaddr='192.168.1.2'
+uci set network.lan.netmask='255.255.255.0'
+# 确保 DHCP 正常
+uci set dhcp.lan.interface='lan'
+uci set dhcp.lan.start='100'
+uci set dhcp.lan.limit='150'
+uci set dhcp.lan.leasetime='12h'
+# 设置主机名
+uci set system.@system[0].hostname='ZWRT'
+uci commit network
+uci commit dhcp
+uci commit system
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-set-lan
+
+#######################################
+# Fix PPP / UPnP issues
+#######################################
+cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes
+#!/bin/sh
+sed -i '8c maxfail 1' /etc/ppp/options
+sed -i '192c sleep 30' /lib/netifd/proto/ppp.sh
+sed -i '10c option external_ip "59.111.160.244"' /etc/config/upnpd
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes
