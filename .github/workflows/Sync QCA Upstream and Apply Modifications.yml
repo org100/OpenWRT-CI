@@ -269,6 +269,8 @@ jobs:
               print "CONFIG_PACKAGE_luci-app-openlist=y"
               print "CONFIG_PACKAGE_nano=y"
               print "CONFIG_PACKAGE_zoneinfo-asia=y"
+              print "CONFIG_PACKAGE_kmod-ipt-conntrack-extra=y"
+              print "CONFIG_PACKAGE_tailscale=y"
               print "CONFIG_PACKAGE_luci-app-tailscale-community=y"
               print "CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y"
             }
