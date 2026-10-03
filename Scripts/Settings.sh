@@ -53,6 +53,15 @@ if [[ "${WRT_CONFIG,,}" == *"wifi"* && "${WRT_CONFIG,,}" == *"no"* ]]; then
 	echo "WRT_WIFI=wifi-no" >> $GITHUB_ENV
 fi
 
+# 只保留指定的 ipq60xx 设备
+if [[ $WRT_CONFIG == *"IPQ60XX"* ]]; then
+    # 只保留： jdcloud_re-ss-01 和 jdcloud_re-cs-02
+    keep_pattern="\(jdcloud_re-ss-01\|jdcloud_re-cs-02\)=y$"
+    sed -i "/^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_/{
+        /$keep_pattern/!d
+    }" ./.config
+fi
+
 #高通平台调整
 DTS_PATH="./target/linux/qualcommax/dts/"
 if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
@@ -62,3 +71,69 @@ if [[ "${WRT_TARGET^^}" == *"QUALCOMMAX"* ]]; then
 		echo "qualcommax set up nowifi successfully!"
 	fi
 fi
+
+#######################################
+# LAN IP / Hostname via uci-defaults
+#######################################
+mkdir -p package/base-files/files/etc/uci-defaults
+cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-set-lan
+#!/bin/sh
+# 设置 LAN IP
+uci set network.lan.ipaddr='192.168.1.2'
+uci set network.lan.netmask='255.255.255.0'
+# 确保 DHCP 正常
+uci set dhcp.lan.interface='lan'
+uci set dhcp.lan.start='100'
+uci set dhcp.lan.limit='150'
+uci set dhcp.lan.leasetime='12h'
+# 设置主机名
+uci set system.@system[0].hostname='ZWRT'
+uci commit network
+uci commit dhcp
+uci commit system
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-set-lan
+
+#######################################
+# Fix PPP / UPnP issues
+#######################################
+cat << 'EOF' > package/base-files/files/etc/uci-defaults/99-custom-fixes
+#!/bin/sh
+# 使用原生的优雅等待机制替代 sleep 30 和 maxfail 1
+uci set network.wan.holdoff='30'
+uci commit network
+sed -i '10c option external_ip "59.111.160.244"' /etc/config/upnpd
+exit 0
+EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-custom-fixes
+
+#######################################
+# 强行注入 Tailscale 完美启动脚本
+#######################################
+cat << 'INNER_EOF' > package/base-files/files/etc/uci-defaults/99-fix-tailscale
+#!/bin/sh
+cat << 'TS_EOF' > /etc/init.d/tailscale
+#!/bin/sh /etc/rc.common
+USE_PROCD=1
+START=99
+STOP=10
+start_service() {
+    mkdir -p /etc/tailscale
+    procd_open_instance
+    procd_set_param env TS_DEBUG_FIREWALL_MODE=nftables
+    procd_set_param command /usr/sbin/tailscaled --state=/etc/tailscale/tailscaled.state --port=41641
+    procd_set_param respawn
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_close_instance
+}
+stop_service() {
+    killall tailscaled
+}
+TS_EOF
+chmod +x /etc/init.d/tailscale
+/etc/init.d/tailscale enable
+exit 0
+INNER_EOF
+chmod +x package/base-files/files/etc/uci-defaults/99-fix-tailscale
